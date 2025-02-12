@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 )
 
-type Cloudflare_ID struct {
+type Cloudflare_ZONE struct {
 	Result []struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -86,37 +87,32 @@ func SendGetRequest(url string) (resp *http.Response, err error) {
 	return resp, nil
 }
 
-func GetZoneId() (string, string, error) {
+func GetZoneId() (Cloudflare_ZONE, error) {
 
 	url := "https://api.cloudflare.com/client/v4/zones"
 
 	resp, err := SendGetRequest(url)
 	if err != nil {
-		return "", "", err
+		return Cloudflare_ZONE{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("Error reading response:", err)
-		return "", "", err
+		return Cloudflare_ZONE{}, err
 	}
 
-	var data Cloudflare_ID
+	var data Cloudflare_ZONE
 	if err := json.Unmarshal(body, &data); err != nil {
-		return "", "", err
+		return Cloudflare_ZONE{}, err
 	}
 
 	if len(data.Result) == 0 {
-		return "", "", fmt.Errorf("no zones found")
+		return Cloudflare_ZONE{}, fmt.Errorf("no zones found")
 	}
 
-	zone := data.Result[0]
-
-	name := zone.Name
-	id := zone.ID
-
-	return name, id, nil
+	return data, nil
 }
 
 func ListDnsRecords(zone_id string) (Cloudflare_DNSRECORDS, error) {
@@ -168,9 +164,16 @@ func GetPublicIp() (string, error) {
 	return ip, nil
 }
 
-func OverwritteDnsrecords(zone_id, dns_record_id, dns_record_name, new_ip string) (CloudFlare_UPDATERECORDS, error) {
+func OverwritteDnsrecords(dns_record_id, dns_record_name, new_ip string) (CloudFlare_UPDATERECORDS, error) {
 
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", zone_id, dns_record_id)
+	zones, err := GetZoneId()
+	if err != nil {
+		log.Fatal("Failed to fetch zone", err)
+		return CloudFlare_UPDATERECORDS{}, err
+	}
+	zone := zones.Result[0]
+
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", zone.ID, dns_record_id)
 
 	var json_body = []byte(`{
 		"comment": "Domain verification record",
