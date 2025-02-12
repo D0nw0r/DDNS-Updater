@@ -27,3 +27,4 @@ When there is a mismatch, a request for change is made.
 # TODO
 - Support for the user to select which record (default just uses record[0])
 - Db integration?
+- better code organization and naming
