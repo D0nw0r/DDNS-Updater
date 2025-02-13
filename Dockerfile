@@ -1,26 +1,18 @@
-FROM golang:1.20-alpine as builder
+# Use a base image for your Go app
+FROM golang:1.23.2-alpine
 
+# Set the working directory inside the container
 WORKDIR /app
 
-COPY go.mod go.sum ./
-
-RUN go mod tidy
-
+# Copy the Go source code into the container
 COPY . .
 
-RUN go build -o myapp
+# Copy the .env file into the container (make sure the path is correct)
+COPY readenv/.env /app/readenv/.env
 
-# Step 2: Create a smaller image for running the Go app
-FROM alpine:latest
+# Install dependencies and build your Go app (adjust as needed)
+RUN go mod tidy
+RUN go build -o myapp .
 
-# Set the Current Working Directory inside the container
-WORKDIR /root/
-
-# Copy the Go app from the builder image
-COPY --from=builder /app/myapp .
-
-# Expose the port the app will run on
-EXPOSE 8080
-
-# Run the Go app
+# Set the entry point for the app (replace with your app's executable)
 CMD ["./myapp"]
