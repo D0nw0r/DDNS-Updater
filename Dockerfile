@@ -10,7 +10,7 @@ COPY . .
 
 RUN go build -o myapp
 
-i# Step 2: Create a smaller image for running the Go app
+# Step 2: Create a smaller image for running the Go app
 FROM alpine:latest
 
 # Set the Current Working Directory inside the container
