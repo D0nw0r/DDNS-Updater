@@ -30,18 +30,21 @@ func mainLoop() {
 			record := CF_Record.Result[0]
 			new_records, err := sr.OverwritteDnsrecords(record.ID, record.Name, public_ip)
 			if err != nil {
-				fmt.Println("Error", err)
-				return
+				fmt.Println("\t[!] ", err)
+				// Uncoment below is optional for the program to exit
+				//return
+				fmt.Println("[!] Sleeping for 10 minutes...")
+				time.Sleep(10 * time.Minute)
+			} else {
+				fmt.Println("[+] Record updated successfully!")
+				fmt.Println("\t[+] ID:", new_records.Result.ID)
+				fmt.Println("\t[+] Name:", new_records.Result.Name)
+				fmt.Println("\t[+] Type:", new_records.Result.Type)
+				fmt.Println("\t[+] Content:", new_records.Result.Content)
+
+				// update our original records with the new ones
+				CF_Record.Result[0] = new_records.Result
 			}
-			fmt.Println("[+] Record updated successfully!")
-			fmt.Println("\t[+] ID:", new_records.Result.ID)
-			fmt.Println("\t[+] Name:", new_records.Result.Name)
-			fmt.Println("\t[+] Type:", new_records.Result.Type)
-			fmt.Println("\t[+] Content:", new_records.Result.Content)
-
-			// update our original records with the new ones
-			CF_Record.Result[0] = new_records.Result
-
 		} else {
 			fmt.Println("[+] IPs match. Sleeping for 10 minutes...")
 			time.Sleep(10 * time.Minute)

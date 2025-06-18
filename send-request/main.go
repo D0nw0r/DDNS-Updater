@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"ddns-updater/readenv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +28,11 @@ type Cloudflare_DNSRECORDS struct {
 	Success bool `json:"success"`
 }
 
+type CloudFlare_UPDATERECORDS_errors struct {
+	Code    uint32 `json:"code"`
+	Message string `json:"message"`
+}
+
 type CloudFlare_UPDATERECORDS struct {
 	Result struct {
 		ID      string `json:"id"`
@@ -34,11 +40,19 @@ type CloudFlare_UPDATERECORDS struct {
 		Type    string `json:"type"`
 		Content string `json:"content"`
 	}
-	Success bool `json:"success"`
+	Success bool                              `json:"success"`
+	Errors  []CloudFlare_UPDATERECORDS_errors `json:"errors"`
+}
+
+type MyIpInfo_err struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
 }
 
 type MyIpInfo struct {
-	Ip string `json:"ip"`
+	Ip     string       `json:"ip"`
+	Status int16        `json:"status"`
+	Error  MyIpInfo_err `json:"error"`
 }
 
 func SendPutRequest(url string, body []byte) (resp *http.Response, err error) {
@@ -64,18 +78,19 @@ func SendPutRequest(url string, body []byte) (resp *http.Response, err error) {
 	return resp, nil
 }
 
-func SendGetRequest(url string) (resp *http.Response, err error) {
+func SendGetRequest(url string, sendHeaders bool) (resp *http.Response, err error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		fmt.Println("Request creation failed:", err)
 		return nil, err
 	}
 
-	key, email := readenv.ReadEnvKeys()
-
-	req.Header.Add("X-Auth-Email", email)
-	req.Header.Add("X-Auth-Key", key)
-	req.Header.Add("Content-type", "application/json")
+	if sendHeaders {
+		key, email := readenv.ReadEnvKeys()
+		req.Header.Add("X-Auth-Email", email)
+		req.Header.Add("X-Auth-Key", key)
+		req.Header.Add("Content-type", "application/json")
+	}
 
 	client := &http.Client{}
 	resp, err = client.Do(req)
@@ -91,7 +106,7 @@ func GetZoneId() (Cloudflare_ZONE, error) {
 
 	url := "https://api.cloudflare.com/client/v4/zones"
 
-	resp, err := SendGetRequest(url)
+	resp, err := SendGetRequest(url, true)
 	if err != nil {
 		return Cloudflare_ZONE{}, err
 	}
@@ -119,7 +134,7 @@ func ListDnsRecords(zone_id string) (Cloudflare_DNSRECORDS, error) {
 
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records", zone_id)
 
-	resp, err := SendGetRequest(url)
+	resp, err := SendGetRequest(url, true)
 	if err != nil {
 		return Cloudflare_DNSRECORDS{}, err
 	}
@@ -142,7 +157,7 @@ func ListDnsRecords(zone_id string) (Cloudflare_DNSRECORDS, error) {
 func GetPublicIp() (string, error) {
 	url := "https://ipinfo.io"
 
-	resp, err := SendGetRequest(url)
+	resp, err := SendGetRequest(url, false)
 	if err != nil {
 		fmt.Println("Request creation failed:", err)
 		return "", err
@@ -155,13 +170,43 @@ func GetPublicIp() (string, error) {
 		return "", err
 	}
 
+	// // Debug helper
+	// fmt.Println("Raw IP Info response:", string(body))
+
 	var data MyIpInfo
 	if err := json.Unmarshal(body, &data); err != nil {
-		return "", nil
+		fmt.Println("JSON unmarshal error:", err)
+		return "", err
 	}
 
-	ip := data.Ip
-	return ip, nil
+	// If we rate limit on one API, try the alternative
+	if data.Status == 429 {
+		// fmt.Printf("[!] Rate limit exceeded: %s - %s\n", data.Error.Title, data.Error.Message)
+		fmt.Println("[!] Rate limit exceeded on ipinfo.io, using alternative provider!")
+		url := "https://api64.ipify.org?format=json"
+		resp, err := SendGetRequest(url, false)
+		if err != nil {
+			fmt.Println("Request creation failed:", err)
+			return "", err
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println("Error reading response:", err)
+			return "", err
+		}
+
+		var data MyIpInfo
+		if err := json.Unmarshal(body, &data); err != nil {
+			fmt.Println("JSON unmarshal error:", err)
+			return "", err
+		}
+
+		return data.Ip, nil
+	}
+
+	return data.Ip, nil
 }
 
 func OverwritteDnsrecords(dns_record_id, dns_record_name, new_ip string) (CloudFlare_UPDATERECORDS, error) {
@@ -202,8 +247,8 @@ func OverwritteDnsrecords(dns_record_id, dns_record_name, new_ip string) (CloudF
 	success := data.Success
 
 	if !success {
-		fmt.Println("Records did not update, full response: ", data)
-		return CloudFlare_UPDATERECORDS{}, err
+		fmt.Println("Records did not update, listing errors:")
+		return CloudFlare_UPDATERECORDS{}, errors.New(data.Errors[0].Message)
 	}
 
 	return data, nil
