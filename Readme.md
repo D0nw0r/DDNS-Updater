@@ -23,6 +23,9 @@ The first 2 are to obtain the current IP address pointed by the record. The last
 The program runs a loop of fetching the Public IP on ipinfo.io and comparing it to the stored records of cloudflare. 
 When there is a mismatch, a request for change is made.
 
+# Container support
+
+Docker and Docker Compose files are included for easy containerization.
 
 # TODO
 - Support for the user to select which record (default just uses record[0])

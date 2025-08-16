@@ -12,7 +12,7 @@ COPY readenv/.env /app/readenv/.env
 
 # Install dependencies and build your Go app (adjust as needed)
 RUN go mod tidy
-RUN go build -o myapp .
+RUN go build -o ddns-updater .
 
 # Set the entry point for the app (replace with your app's executable)
-CMD ["./myapp"]
+CMD ["./ddns-updater"]
